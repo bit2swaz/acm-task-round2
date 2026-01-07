@@ -1,0 +1,39 @@
+services:
+  # --- THE BACKENDS ---
+  # We hashicorp/http-echo because for A/B testing, we just need visual proof that the version changed. 
+  # This image is lightweight and does exactly one thing: prints text.
+  app-a:
+    image: hashicorp/http-echo
+    container_name: app_a
+    # We tell it to print "Version A" so we can prove the route worked.
+    command: -text="🟦 VERSION A"
+    networks:
+      - ab_testing_net # Join the private network
+
+  app-b:
+    image: hashicorp/http-echo
+    container_name: app_b
+    command: -text="🟩 VERSION B"
+    networks:
+      - ab_testing_net
+
+  # --- THE GATEKEEPER ---
+  proxy:
+    image: nginx:alpine # Alpine is a tiny Linux distro (security + speed)
+    container_name: nginx_lb
+    ports:
+      - "8080:80" # The only bridge to the outside world
+    volumes:
+      # We inject our custom config file into the container at runtime.
+      # This is "Configuration as Code".
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro 
+    depends_on:
+      - app-a # Wait for apps to start before starting the proxy
+      - app-b
+    networks:
+      - ab_testing_net
+
+# Define the private network.
+# Without this, they are isolated and can't talk.
+networks:
+  ab_testing_net:
